@@ -37,6 +37,18 @@ function getFeatureIdentity(feature, layer, index) {
   return index === undefined ? null : `index:${index}`;
 }
 
+function featureMatchesSearch(feature, layer, query) {
+  const trimmedQuery = query?.trim().toLowerCase();
+  const searchFields = layer?.searchFields || [];
+
+  if (!trimmedQuery || searchFields.length === 0) return true;
+
+  return searchFields.some((field) => {
+    const value = getProperty(feature, field);
+    return hasValue(value) && `${value}`.toLowerCase().includes(trimmedQuery);
+  });
+}
+
 function getSidebarText(feature, layer) {
   const titleFields = layer?.sidebarFields?.title || [layer?.titleField];
   const subtitleFields =
@@ -95,13 +107,20 @@ export default function SidePanel({
   const hasActiveFilters = Object.values(filters).some((v) => v);
 
   const currentLayer = sidebarLayers.find((l) => l.id === activeLayer);
+  const hasSearchFields = (currentLayer?.searchFields || []).length > 0;
+  const displayedFeatures = features.filter((feature) =>
+    featureMatchesSearch(feature, currentLayer, searchQuery)
+  );
   const showCount =
-    (searchQuery || hasActiveFilters) && activeLayer === 'prv_punkt';
+    (searchQuery && hasSearchFields) ||
+    (hasActiveFilters && activeLayer === 'prv_punkt');
   const totalCount = allFeatures?.length || features.length;
   const title =
     currentLayer?.type === 'line'
-      ? `Ledninger (${features.length})`
-      : `Punkter (${features.length}${
+      ? `Ledninger (${displayedFeatures.length}${
+          showCount ? ` av ${totalCount}` : ''
+        })`
+      : `Punkter (${displayedFeatures.length}${
           showCount ? ` av ${totalCount}` : ''
         })`;
 
@@ -178,8 +197,8 @@ export default function SidePanel({
         </div>
       </div>
 
-      {/* Search box and filter - only show for prv_punkt */}
-      {activeLayer === 'prv_punkt' && (
+      {/* Search box and filter */}
+      {hasSearchFields && (
         <div className="border-b" style={{ borderColor: '#e5e7eb' }}>
           <div className="px-3 py-2 flex gap-2">
             <input
@@ -193,37 +212,39 @@ export default function SidePanel({
                 color: '#656263',
               }}
             />
-            <button
-              onClick={() => setShowFilters(!showFilters)}
-              className="px-2 py-2 border rounded-md transition-colors flex items-center justify-center hover:bg-gray-50"
-              style={{
-                minWidth: '40px',
-                ...(showFilters || hasActiveFilters
-                  ? { borderColor: '#4782cb', color: '#4782cb' }
-                  : { borderColor: '#e5e7eb', color: '#656263' }),
-              }}
-              title="Filter på prøvetype"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-5 w-5 flex-shrink-0"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2}
+            {activeLayer === 'prv_punkt' && (
+              <button
+                onClick={() => setShowFilters(!showFilters)}
+                className="px-2 py-2 border rounded-md transition-colors flex items-center justify-center hover:bg-gray-50"
+                style={{
+                  minWidth: '40px',
+                  ...(showFilters || hasActiveFilters
+                    ? { borderColor: '#4782cb', color: '#4782cb' }
+                    : { borderColor: '#e5e7eb', color: '#656263' }),
+                }}
+                title="Filter på prøvetype"
               >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
-                />
-              </svg>
-              {hasActiveFilters && (
-                <span className="ml-1 text-xs font-bold flex-shrink-0">
-                  {Object.values(filters).filter(Boolean).length}
-                </span>
-              )}
-            </button>
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="h-5 w-5 flex-shrink-0"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
+                  />
+                </svg>
+                {hasActiveFilters && (
+                  <span className="ml-1 text-xs font-bold flex-shrink-0">
+                    {Object.values(filters).filter(Boolean).length}
+                  </span>
+                )}
+              </button>
+            )}
           </div>
 
           {/* Filter panel */}
@@ -385,7 +406,7 @@ export default function SidePanel({
       )}
       {/* Feature list */}
       <ul className="p-2 flex-1 overflow-y-auto">
-        {features.map((f, index) => {
+        {displayedFeatures.map((f, index) => {
           const key = getFeatureIdentity(f, currentLayer, index);
           const selectedKey = getFeatureIdentity(
             selectedFeature,
