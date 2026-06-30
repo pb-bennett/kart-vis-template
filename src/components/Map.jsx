@@ -41,6 +41,22 @@ function isLayerLabelVisibleAtZoom(layerId, zoom) {
   );
 }
 
+function getLayerSymbol(layerId) {
+  return layersById[layerId]?.symbol || {};
+}
+
+function getStyleByProperty(layerId, styleId, propertyValue) {
+  const styleRule = layersById[layerId]?.styleByProperty?.find(
+    (rule) => rule.id === styleId
+  );
+
+  return (
+    styleRule?.values?.[propertyValue] ||
+    styleRule?.default ||
+    {}
+  );
+}
+
 // Copy button component for coordinates
 function CopyButton({ text, label }) {
   const [copied, setCopied] = useState(false);
@@ -990,17 +1006,15 @@ export default function Map({
 
               // Line styling based on FCODE
               const fcode = f.properties.FCODE;
-              let lineColor, lineDash;
-              if (fcode === 'SPO') {
-                lineColor = '#22c55e'; // Green
-                lineDash = '10, 10';
-              } else if (fcode === 'AFO') {
-                lineColor = '#ef4444'; // Red
-                lineDash = '10, 10';
-              } else {
-                lineColor = '#3b82f6'; // Blue (default)
-                lineDash = '10, 10';
-              }
+              const lineSymbol = getLayerSymbol(f._layer);
+              const lineStyle = getStyleByProperty(
+                f._layer,
+                'lineByFcode',
+                fcode
+              );
+              const lineColor = lineStyle.color || lineSymbol.color;
+              const lineDash =
+                lineStyle.dashArray || lineSymbol.dashArray;
 
               return (
                 <React.Fragment key={uniqueKey}>
@@ -1009,8 +1023,8 @@ export default function Map({
                     <Polyline
                       positions={positions}
                       pathOptions={{
-                        color: '#fbbf24',
-                        weight: 8,
+                        color: lineSymbol.selectedGlowColor,
+                        weight: lineSymbol.selectedWeight,
                         opacity: 0.4,
                         dashArray: lineDash,
                       }}
@@ -1021,8 +1035,8 @@ export default function Map({
                     positions={positions}
                     pathOptions={{
                       color: lineColor,
-                      weight: 4,
-                      opacity: 0.8,
+                      weight: lineSymbol.weight,
+                      opacity: lineSymbol.opacity,
                       dashArray: lineDash,
                     }}
                     eventHandlers={{
@@ -1134,37 +1148,21 @@ export default function Map({
               const { coordinates } = f.geometry;
               const latlng = [coordinates[1], coordinates[0]];
 
-              // Determine point type and styling
-              let pointColor, pointFillColor, pointRadius, pointLabel;
               const fcode = f.properties.FCODE;
               const isOverflow = fcode === 'OVL' || f.properties.FUNC;
-
-              // Check if it's from prv_punkt (has REFNO) or ult_punkt (has OVL FCODE)
-              if (isOverflow) {
-                // Overløpspunkt (ult_punkt) - Orange/Yellow SQUARE
-                pointColor = '#f97316';
-                pointFillColor = '#fb923c';
-                pointRadius = 7;
-                pointLabel = '□'; // Square symbol for overflow
-              } else {
-                // Prøvetakingspunkt (prv_punkt) - Magenta CIRCLE
-                pointColor = '#c026d3';
-                pointFillColor = '#e879f9';
-                pointRadius = 6;
-                pointLabel = '●'; // Filled circle for sampling
-              }
+              const pointSymbol = getLayerSymbol(f._layer);
+              const pointColor = pointSymbol.strokeColor;
+              const pointFillColor = pointSymbol.fillColor;
+              const pointRadius = pointSymbol.radius;
 
               // Owner-based stroke color (keep same thickness/style, only vary color)
               const owner = (f.properties.Eier || '').trim();
-              let strokeColor;
-              if (owner === 'TK') {
-                strokeColor = '#22c55e'; // Tønsberg Kommune - green
-              } else if (owner === 'TR') {
-                strokeColor = '#ff4500'; // Tønsberg Renseanlegg - orangered
-              } else {
-                // FK (Færder Kommune) and others - keep default
-                strokeColor = pointColor;
-              }
+              const ownerStyle = getStyleByProperty(
+                f._layer,
+                'owner',
+                owner
+              );
+              const strokeColor = ownerStyle.strokeColor || pointColor;
 
               // For overflow points, use a square marker (DivIcon)
               if (isOverflow) {
@@ -1391,8 +1389,8 @@ export default function Map({
                       center={latlng}
                       radius={pointRadius + 7}
                       pathOptions={{
-                        color: '#fbbf24',
-                        fillColor: '#fbbf24',
+                        color: pointSymbol.selectedGlowColor,
+                        fillColor: pointSymbol.selectedGlowColor,
                         weight: 3,
                         opacity: 0.5,
                         fillOpacity: 0.2,
@@ -1451,9 +1449,9 @@ export default function Map({
                     pathOptions={{
                       color: strokeColor,
                       fillColor: pointFillColor,
-                      weight: 2,
+                      weight: pointSymbol.strokeWidth,
                       opacity: 1,
-                      fillOpacity: 0.8,
+                      fillOpacity: pointSymbol.fillOpacity,
                     }}
                     eventHandlers={{
                       click: (e) => {
