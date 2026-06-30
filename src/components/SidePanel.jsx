@@ -4,95 +4,31 @@ import { useState } from 'react';
 import Image from 'next/image';
 import appConfig from '../config/appConfig';
 import configuredLayers from '../config/layers';
+import {
+  filterFeatures,
+  getConfiguredFilterOptions,
+  getFeatureIdentity,
+  getFeatureProperty,
+  getFirstNonEmptyProperty,
+} from '../lib/features';
 
 const sidebarLayers = configuredLayers.filter((layer) => layer.showInSidebar);
 
-function getProperty(feature, field) {
-  return feature?.properties?.[field];
-}
-
 function hasValue(value) {
   return value !== undefined && value !== null && `${value}`.trim() !== '';
-}
-
-function getFirstFieldValue(feature, fields = []) {
-  for (const field of fields) {
-    const value = getProperty(feature, field);
-    if (hasValue(value)) return { field, value };
-  }
-
-  return null;
-}
-
-function getFeatureIdentity(feature, layer, index) {
-  const idFields = [layer?.idField, ...(layer?.fallbackIdFields || [])].filter(
-    Boolean
-  );
-
-  for (const field of idFields) {
-    const value = getProperty(feature, field);
-    if (hasValue(value)) return `${field}:${value}`;
-  }
-
-  return index === undefined ? null : `index:${index}`;
-}
-
-function featureMatchesSearch(feature, layer, query) {
-  const trimmedQuery = query?.trim().toLowerCase();
-  const searchFields = layer?.searchFields || [];
-
-  if (!trimmedQuery || searchFields.length === 0) return true;
-
-  return searchFields.some((field) => {
-    const value = getProperty(feature, field);
-    return hasValue(value) && `${value}`.toLowerCase().includes(trimmedQuery);
-  });
-}
-
-function getConfiguredFilterOptions(layer) {
-  return (layer?.filters || []).flatMap((filterGroup) =>
-    filterGroup.options || []
-  );
-}
-
-function featureMatchesFilters(feature, layer, filters) {
-  const filterGroups = layer?.filters || [];
-
-  return filterGroups.every((filterGroup) => {
-    const selectedOptions = (filterGroup.options || []).filter(
-      (option) => filters[option.id]
-    );
-
-    if (selectedOptions.length === 0) return true;
-
-    if (filterGroup.type === 'booleanAny') {
-      return selectedOptions.some((option) =>
-        Boolean(getProperty(feature, option.field))
-      );
-    }
-
-    if (filterGroup.type === 'equalsAny') {
-      return selectedOptions.some((option) => {
-        const value = getProperty(feature, filterGroup.field);
-        return hasValue(value) && `${value}`.trim() === `${option.value}`;
-      });
-    }
-
-    return true;
-  });
 }
 
 function getSidebarText(feature, layer) {
   const titleFields = layer?.sidebarFields?.title || [layer?.titleField];
   const subtitleFields =
     layer?.sidebarFields?.subtitle || layer?.subtitleFields || [];
-  const titleMatch = getFirstFieldValue(feature, titleFields);
-  const subtitleMatch = getFirstFieldValue(feature, subtitleFields);
+  const titleMatch = getFirstNonEmptyProperty(feature, titleFields);
+  const subtitleMatch = getFirstNonEmptyProperty(feature, subtitleFields);
 
   if (layer?.id === 'utl_ledning') {
-    const fcode = getProperty(feature, 'FCODE');
-    const lsid = getProperty(feature, 'LSID');
-    const length = getProperty(feature, 'LENGTH');
+    const fcode = getFeatureProperty(feature, 'FCODE');
+    const lsid = getFeatureProperty(feature, 'LSID');
+    const length = getFeatureProperty(feature, 'LENGTH');
 
     return {
       title: hasValue(fcode)
@@ -103,7 +39,7 @@ function getSidebarText(feature, layer) {
   }
 
   if (layer?.id === 'prv_punkt') {
-    const psid = getProperty(feature, 'PSID');
+    const psid = getFeatureProperty(feature, 'PSID');
 
     return {
       title: titleMatch?.value || (hasValue(psid) ? `PSID ${psid}` : 'Ukjent'),
@@ -114,7 +50,7 @@ function getSidebarText(feature, layer) {
     };
   }
 
-  const psid = getProperty(feature, 'PSID');
+  const psid = getFeatureProperty(feature, 'PSID');
 
   return {
     title: titleMatch?.value || (hasValue(psid) ? `PSID ${psid}` : 'Ukjent'),
@@ -145,13 +81,12 @@ export default function SidePanel({
   ).length;
   const hasActiveFilters = activeFilterCount > 0;
   const hasSearchFields = (currentLayer?.searchFields || []).length > 0;
-  const displayedFeatures = features
-    .filter((feature) =>
-      featureMatchesSearch(feature, currentLayer, searchQuery)
-    )
-    .filter((feature) =>
-      featureMatchesFilters(feature, currentLayer, filters)
-    );
+  const displayedFeatures = filterFeatures(
+    features,
+    currentLayer,
+    searchQuery,
+    filters
+  );
   const showCount =
     (searchQuery && hasSearchFields) ||
     (hasActiveFilters && hasConfiguredFilters);
@@ -384,7 +319,7 @@ export default function SidePanel({
       {/* Feature list */}
       <ul className="p-2 flex-1 overflow-y-auto">
         {displayedFeatures.map((f, index) => {
-          const key = getFeatureIdentity(f, currentLayer, index);
+          const key = getFeatureIdentity(f, currentLayer, `index:${index}`);
           const selectedKey = getFeatureIdentity(
             selectedFeature,
             currentLayer

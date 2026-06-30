@@ -3,11 +3,17 @@
 import { useState, useMemo } from 'react';
 import SidePanel from '../components/SidePanel';
 import dynamic from 'next/dynamic';
+import configuredLayers from '../config/layers';
+import { filterFeatures } from '../lib/features';
 
 // Import GeoJSON data directly - no need to serve publicly
 import prvPunktData from '../data/prv_punkt.json';
 import ultPunktData from '../data/ult_punkt.json';
 import utlLedningData from '../data/utl_ledning.json';
+
+const layersById = Object.fromEntries(
+  configuredLayers.map((layer) => [layer.id, layer])
+);
 
 const Map = dynamic(() => import('../components/Map'), {
   ssr: false,
@@ -36,63 +42,14 @@ export default function Home() {
   // Get features for the active layer (for sidebar display)
   const activeFeatures = allLayers[activeLayer] || [];
 
-  // Check if any filter is active
-  const hasActiveFilters = Object.values(filters).some((v) => v);
-  const hasTestTypeFilters =
-    filters.vannprøve ||
-    filters.sedimentprøve ||
-    filters.bløtbunnsfauna;
-  const hasOwnerFilters =
-    filters.ownerFK || filters.ownerTK || filters.ownerTR;
-
-  // Filter prv_punkt features based on search query and test type filters
   const filteredPrvPunkt = useMemo(() => {
-    let result = allLayers.prv_punkt;
-
-    // Apply search filter
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase().trim();
-      result = result.filter((f) => {
-        const navn = (f.properties.navn || '').toLowerCase();
-        const vannlok = (
-          f.properties['vannlok-kode'] || ''
-        ).toLowerCase();
-        return navn.includes(query) || vannlok.includes(query);
-      });
-    }
-
-    // Apply test type filters
-    if (hasTestTypeFilters) {
-      result = result.filter((f) => {
-        if (filters.vannprøve && f.properties.vannprøve) return true;
-        if (filters.sedimentprøve && f.properties.sedimentprøve)
-          return true;
-        if (filters.bløtbunnsfauna && f.properties.Bløtbunnsfauna)
-          return true;
-        return false;
-      });
-    }
-
-    // Apply owner filters
-    if (hasOwnerFilters) {
-      result = result.filter((f) => {
-        const owner = (f.properties.Eier || '').trim();
-        if (filters.ownerFK && owner === 'FK') return true;
-        if (filters.ownerTK && owner === 'TK') return true;
-        if (filters.ownerTR && owner === 'TR') return true;
-        return false;
-      });
-    }
-
-    return result;
-  }, [
-    allLayers.prv_punkt,
-    searchQuery,
-    filters,
-    hasActiveFilters,
-    hasTestTypeFilters,
-    hasOwnerFilters,
-  ]);
+    return filterFeatures(
+      allLayers.prv_punkt,
+      layersById.prv_punkt,
+      searchQuery,
+      filters
+    );
+  }, [allLayers.prv_punkt, searchQuery, filters]);
 
   // Filtered layers for the map - only prv_punkt is filtered
   const filteredLayers = {
