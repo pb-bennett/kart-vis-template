@@ -3,6 +3,79 @@
 import { useState } from 'react';
 import Image from 'next/image';
 import appConfig from '../config/appConfig';
+import configuredLayers from '../config/layers';
+
+const sidebarLayers = configuredLayers.filter((layer) => layer.showInSidebar);
+
+function getProperty(feature, field) {
+  return feature?.properties?.[field];
+}
+
+function hasValue(value) {
+  return value !== undefined && value !== null && `${value}`.trim() !== '';
+}
+
+function getFirstFieldValue(feature, fields = []) {
+  for (const field of fields) {
+    const value = getProperty(feature, field);
+    if (hasValue(value)) return { field, value };
+  }
+
+  return null;
+}
+
+function getFeatureIdentity(feature, layer, index) {
+  const idFields = [layer?.idField, ...(layer?.fallbackIdFields || [])].filter(
+    Boolean
+  );
+
+  for (const field of idFields) {
+    const value = getProperty(feature, field);
+    if (hasValue(value)) return `${field}:${value}`;
+  }
+
+  return index === undefined ? null : `index:${index}`;
+}
+
+function getSidebarText(feature, layer) {
+  const titleFields = layer?.sidebarFields?.title || [layer?.titleField];
+  const subtitleFields =
+    layer?.sidebarFields?.subtitle || layer?.subtitleFields || [];
+  const titleMatch = getFirstFieldValue(feature, titleFields);
+  const subtitleMatch = getFirstFieldValue(feature, subtitleFields);
+
+  if (layer?.id === 'utl_ledning') {
+    const fcode = getProperty(feature, 'FCODE');
+    const lsid = getProperty(feature, 'LSID');
+    const length = getProperty(feature, 'LENGTH');
+
+    return {
+      title: hasValue(fcode)
+        ? `${fcode} - LSID ${hasValue(lsid) ? lsid : '?'}`
+        : `LSID ${hasValue(lsid) ? lsid : '?'}`,
+      subtitle: hasValue(length) ? `${Number(length).toFixed(0)} m` : '? m',
+    };
+  }
+
+  if (layer?.id === 'prv_punkt') {
+    const psid = getProperty(feature, 'PSID');
+
+    return {
+      title: titleMatch?.value || (hasValue(psid) ? `PSID ${psid}` : 'Ukjent'),
+      subtitle:
+        subtitleMatch?.field === 'PSID'
+          ? `PSID: ${subtitleMatch.value}`
+          : subtitleMatch?.value?.trim?.() || subtitleMatch?.value || '',
+    };
+  }
+
+  const psid = getProperty(feature, 'PSID');
+
+  return {
+    title: titleMatch?.value || (hasValue(psid) ? `PSID ${psid}` : 'Ukjent'),
+    subtitle: hasValue(psid) ? `PSID: ${psid}` : subtitleMatch?.value || '',
+  };
+}
 
 export default function SidePanel({
   features,
@@ -18,16 +91,10 @@ export default function SidePanel({
 }) {
   const [showFilters, setShowFilters] = useState(false);
 
-  const layers = [
-    { id: 'prv_punkt', name: 'Prøvetakingspunkt', type: 'point' },
-    { id: 'ult_punkt', name: 'Overløpspunkt', type: 'point' },
-    { id: 'utl_ledning', name: 'Overløpsledning', type: 'line' },
-  ];
-
   // Check if any filter is active
   const hasActiveFilters = Object.values(filters).some((v) => v);
 
-  const currentLayer = layers.find((l) => l.id === activeLayer);
+  const currentLayer = sidebarLayers.find((l) => l.id === activeLayer);
   const showCount =
     (searchQuery || hasActiveFilters) && activeLayer === 'prv_punkt';
   const totalCount = allFeatures?.length || features.length;
@@ -87,7 +154,7 @@ export default function SidePanel({
       {/* Layer tabs */}
       <div className="border-b" style={{ borderColor: '#e5e7eb' }}>
         <div className="flex">
-          {layers.map((layer) => (
+          {sidebarLayers.map((layer) => (
             <button
               key={layer.id}
               onClick={() => handleLayerChange(layer.id)}
@@ -105,7 +172,7 @@ export default function SidePanel({
                   : { color: '#656263' }
               }
             >
-              {layer.name}
+              {layer.label}
             </button>
           ))}
         </div>
@@ -319,36 +386,16 @@ export default function SidePanel({
       {/* Feature list */}
       <ul className="p-2 flex-1 overflow-y-auto">
         {features.map((f, index) => {
-          const key = f.properties.fid ?? `feature-${index}`;
-          let title, subtitle;
-
-          if (activeLayer === 'utl_ledning') {
-            // Line features
-            title = f.properties.FCODE
-              ? `${f.properties.FCODE} - LSID ${f.properties.LSID}`
-              : `LSID ${f.properties.LSID}`;
-            subtitle = `${f.properties.LENGTH?.toFixed(0) || '?'} m`;
-          } else if (activeLayer === 'prv_punkt') {
-            // Prøvetakingspunkt - use navn
-            title = f.properties.navn || `PSID ${f.properties.PSID}`;
-            subtitle =
-              f.properties['vannlok-kode']?.trim() ||
-              (f.properties.PSID ? `PSID: ${f.properties.PSID}` : '');
-          } else {
-            // Overløpspunkt (ult_punkt)
-            title =
-              f.properties.navn ||
-              f.properties.REF ||
-              `PSID ${f.properties.PSID}`;
-            subtitle = f.properties.PSID
-              ? `PSID: ${f.properties.PSID}`
-              : '';
-          }
+          const key = getFeatureIdentity(f, currentLayer, index);
+          const selectedKey = getFeatureIdentity(
+            selectedFeature,
+            currentLayer
+          );
+          const { title, subtitle } = getSidebarText(f, currentLayer);
 
           const isSelected =
             selectedFeature &&
-            selectedFeature.properties &&
-            selectedFeature.properties.fid === key;
+            (selectedKey ? selectedKey === key : selectedFeature === f);
 
           return (
             <li
