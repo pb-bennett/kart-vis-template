@@ -1,0 +1,56 @@
+export const theme = {
+  colors: {
+    primary: '#4782cb',
+    text: '#656263',
+    mutedText: '#9ca3af',
+    background: '#f3f4f6',
+    pageBackground: '#f3f4f6',
+    panelBackground: '#ffffff',
+    controlBackground: '#ffffff',
+    subtleBackground: '#f9fafb',
+    hoverBackground: '#f3f4f6',
+    selectedBackground: '#e8f1fc',
+    selectedHighlight: '#fbbf24',
+    border: '#e5e7eb',
+    darkOverlay: 'rgba(0, 0, 0, 0.5)',
+    success: '#22c55e',
+    danger: '#ef4444',
+    warning: '#f97316',
+    map: {
+      measure: '#4782cb',
+      selectionGlow: '#fbbf24',
+      labelText: '#1f2937',
+      labelOutline: '#ffffff',
+      defaultLine: '#3b82f6',
+      spoLine: '#22c55e',
+      afoLine: '#ef4444',
+      samplingStroke: '#c026d3',
+      samplingFill: '#e879f9',
+      overflowStroke: '#f97316',
+      overflowFill: '#fb923c',
+      ownerFk: '#c026d3',
+      ownerTk: '#22c55e',
+      ownerTr: '#ff4500',
+    },
+  },
+  controls: {
+    borderRadius: {
+      small: '0.375rem',
+      medium: '0.5rem',
+    },
+    zIndex: {
+      mapControl: 1000,
+      modal: 2000,
+    },
+    sidebarWidth: '20rem',
+  },
+  map: {
+    pointRadius: 6,
+    overflowPointRadius: 7,
+    lineWeight: 4,
+    selectedLineWeight: 8,
+    lineDashArray: '10, 10',
+  },
+};
+
+export default theme;
