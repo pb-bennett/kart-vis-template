@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Image from 'next/image';
+import appConfig from '../config/appConfig';
 
 export default function SidePanel({
   features,
@@ -74,8 +75,8 @@ export default function SidePanel({
         style={{ backgroundColor: '#ffffff', borderColor: '#656263' }}
       >
         <Image
-          src="/FK_logo.svg"
-          alt="Færder Kommune"
+          src={appConfig.branding.logoSrc}
+          alt={appConfig.branding.logoAlt}
           width={300}
           height={100}
           className="w-full h-auto"

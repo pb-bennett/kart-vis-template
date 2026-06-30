@@ -1,4 +1,5 @@
 import { Geist, Geist_Mono } from 'next/font/google';
+import appConfig from '../config/appConfig';
 import './globals.css';
 
 const geistSans = Geist({
@@ -12,13 +13,13 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata = {
-  title: 'Kart Vis',
-  description: 'Kartvisualisering for Færder Kommune',
+  title: appConfig.title,
+  description: appConfig.description,
 };
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en">
+    <html lang={appConfig.language}>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
