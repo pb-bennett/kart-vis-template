@@ -16,6 +16,11 @@ import {
   useMapEvents,
 } from 'react-leaflet';
 import L from 'leaflet';
+import configuredBasemaps, { defaultBasemapId } from '../config/basemaps';
+
+const basemapsById = Object.fromEntries(
+  configuredBasemaps.map((basemap) => [basemap.id, basemap])
+);
 
 // Copy button component for coordinates
 function CopyButton({ text, label }) {
@@ -479,7 +484,7 @@ export default function Map({
   allLayers = {},
   activeLayer = 'prv_punkt',
 }) {
-  const [basemap, setBasemap] = useState('geonorgeGraatone');
+  const [basemap, setBasemap] = useState(defaultBasemapId);
   const [currentZoom, setCurrentZoom] = useState(11);
   const [isMeasuring, setIsMeasuring] = useState(false);
   const [measureKey, setMeasureKey] = useState(0);
@@ -666,27 +671,8 @@ export default function Map({
   ]);
   const center = latlngs.length ? latlngs[0] : [59.2, 10.4];
 
-  // Basemap configurations
-  const basemaps = {
-    geonorge: {
-      url: 'https://cache.kartverket.no/v1/wmts/1.0.0/topo/default/webmercator/{z}/{y}/{x}.png',
-      attribution:
-        '&copy; <a href="https://www.kartverket.no/">Kartverket</a>',
-      maxNativeZoom: 18, // Kartverket tiles available up to zoom 18
-    },
-    geonorgeGraatone: {
-      url: 'https://cache.kartverket.no/v1/wmts/1.0.0/topograatone/default/webmercator/{z}/{y}/{x}.png',
-      attribution:
-        '&copy; <a href="https://www.kartverket.no/">Kartverket</a>',
-      maxNativeZoom: 18,
-    },
-    osm: {
-      url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-      attribution:
-        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-      maxNativeZoom: 19,
-    },
-  };
+  const selectedBasemap =
+    basemapsById[basemap] || basemapsById[defaultBasemapId];
 
   return (
     <div className="h-full relative">
@@ -712,13 +698,11 @@ export default function Map({
           className="text-sm rounded px-2 py-1.5 bg-white cursor-pointer w-full border"
           style={{ borderColor: '#4782cb', color: '#656263' }}
         >
-          <option value="geonorge">
-            Topografisk Norgeskart farge
-          </option>
-          <option value="geonorgeGraatone">
-            Topografisk Norgeskart gråtone
-          </option>
-          <option value="osm">OpenStreetMap</option>
+          {configuredBasemaps.map((configuredBasemap) => (
+            <option key={configuredBasemap.id} value={configuredBasemap.id}>
+              {configuredBasemap.label}
+            </option>
+          ))}
         </select>
       </div>
 
@@ -955,10 +939,10 @@ export default function Map({
         <ZoomLevelDisplay onZoomChange={setCurrentZoom} />
         <TileLayer
           key={basemap}
-          attribution={basemaps[basemap].attribution}
-          url={basemaps[basemap].url}
+          attribution={selectedBasemap.attribution}
+          url={selectedBasemap.tileUrl}
           maxZoom={19}
-          maxNativeZoom={basemaps[basemap].maxNativeZoom}
+          maxNativeZoom={selectedBasemap.maxNativeZoom}
         />
 
         {/* Render lines (not clustered) - hide at zoom 12 or further out */}
