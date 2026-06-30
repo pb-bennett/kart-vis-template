@@ -49,6 +49,39 @@ function featureMatchesSearch(feature, layer, query) {
   });
 }
 
+function getConfiguredFilterOptions(layer) {
+  return (layer?.filters || []).flatMap((filterGroup) =>
+    filterGroup.options || []
+  );
+}
+
+function featureMatchesFilters(feature, layer, filters) {
+  const filterGroups = layer?.filters || [];
+
+  return filterGroups.every((filterGroup) => {
+    const selectedOptions = (filterGroup.options || []).filter(
+      (option) => filters[option.id]
+    );
+
+    if (selectedOptions.length === 0) return true;
+
+    if (filterGroup.type === 'booleanAny') {
+      return selectedOptions.some((option) =>
+        Boolean(getProperty(feature, option.field))
+      );
+    }
+
+    if (filterGroup.type === 'equalsAny') {
+      return selectedOptions.some((option) => {
+        const value = getProperty(feature, filterGroup.field);
+        return hasValue(value) && `${value}`.trim() === `${option.value}`;
+      });
+    }
+
+    return true;
+  });
+}
+
 function getSidebarText(feature, layer) {
   const titleFields = layer?.sidebarFields?.title || [layer?.titleField];
   const subtitleFields =
@@ -104,16 +137,24 @@ export default function SidePanel({
   const [showFilters, setShowFilters] = useState(false);
 
   // Check if any filter is active
-  const hasActiveFilters = Object.values(filters).some((v) => v);
-
   const currentLayer = sidebarLayers.find((l) => l.id === activeLayer);
+  const configuredFilterOptions = getConfiguredFilterOptions(currentLayer);
+  const hasConfiguredFilters = configuredFilterOptions.length > 0;
+  const activeFilterCount = configuredFilterOptions.filter(
+    (option) => filters[option.id]
+  ).length;
+  const hasActiveFilters = activeFilterCount > 0;
   const hasSearchFields = (currentLayer?.searchFields || []).length > 0;
-  const displayedFeatures = features.filter((feature) =>
-    featureMatchesSearch(feature, currentLayer, searchQuery)
-  );
+  const displayedFeatures = features
+    .filter((feature) =>
+      featureMatchesSearch(feature, currentLayer, searchQuery)
+    )
+    .filter((feature) =>
+      featureMatchesFilters(feature, currentLayer, filters)
+    );
   const showCount =
     (searchQuery && hasSearchFields) ||
-    (hasActiveFilters && activeLayer === 'prv_punkt');
+    (hasActiveFilters && hasConfiguredFilters);
   const totalCount = allFeatures?.length || features.length;
   const title =
     currentLayer?.type === 'line'
@@ -140,14 +181,23 @@ export default function SidePanel({
 
   // Clear all filters
   const clearFilters = () => {
-    onFiltersChange({
-      vannprøve: false,
-      sedimentprøve: false,
-      bløtbunnsfauna: false,
-      ownerFK: false,
-      ownerTK: false,
-      ownerTR: false,
-    });
+    const clearedFilters = configuredFilterOptions.reduce(
+      (nextFilters, option) => ({
+        ...nextFilters,
+        [option.id]: false,
+      }),
+      { ...filters }
+    );
+
+    onFiltersChange(clearedFilters);
+  };
+
+  const getFilterHeading = (filterGroup) =>
+    `Filtrer på ${filterGroup.label.toLowerCase()}`;
+
+  const getFilterButtonTitle = () => {
+    const firstFilter = currentLayer?.filters?.[0];
+    return firstFilter ? `Filter på ${firstFilter.label.toLowerCase()}` : '';
   };
 
   return (
@@ -198,21 +248,23 @@ export default function SidePanel({
       </div>
 
       {/* Search box and filter */}
-      {hasSearchFields && (
+      {(hasSearchFields || hasConfiguredFilters) && (
         <div className="border-b" style={{ borderColor: '#e5e7eb' }}>
           <div className="px-3 py-2 flex gap-2">
-            <input
-              type="text"
-              placeholder="Søk i navn eller vannlok..."
-              value={searchQuery}
-              onChange={(e) => onSearchChange(e.target.value)}
-              className="flex-1 px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2"
-              style={{
-                borderColor: '#e5e7eb',
-                color: '#656263',
-              }}
-            />
-            {activeLayer === 'prv_punkt' && (
+            {hasSearchFields && (
+              <input
+                type="text"
+                placeholder="Søk i navn eller vannlok..."
+                value={searchQuery}
+                onChange={(e) => onSearchChange(e.target.value)}
+                className="flex-1 px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2"
+                style={{
+                  borderColor: '#e5e7eb',
+                  color: '#656263',
+                }}
+              />
+            )}
+            {hasConfiguredFilters && (
               <button
                 onClick={() => setShowFilters(!showFilters)}
                 className="px-2 py-2 border rounded-md transition-colors flex items-center justify-center hover:bg-gray-50"
@@ -222,7 +274,7 @@ export default function SidePanel({
                     ? { borderColor: '#4782cb', color: '#4782cb' }
                     : { borderColor: '#e5e7eb', color: '#656263' }),
                 }}
-                title="Filter på prøvetype"
+                title={getFilterButtonTitle()}
               >
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
@@ -240,7 +292,7 @@ export default function SidePanel({
                 </svg>
                 {hasActiveFilters && (
                   <span className="ml-1 text-xs font-bold flex-shrink-0">
-                    {Object.values(filters).filter(Boolean).length}
+                    {activeFilterCount}
                   </span>
                 )}
               </button>
@@ -248,7 +300,7 @@ export default function SidePanel({
           </div>
 
           {/* Filter panel */}
-          {showFilters && (
+          {showFilters && hasConfiguredFilters && (
             <div
               className="px-3 py-3 border-t"
               style={{
@@ -256,132 +308,57 @@ export default function SidePanel({
                 backgroundColor: '#f9fafb',
               }}
             >
-              <div className="flex items-center justify-between mb-2">
-                <span
-                  className="text-xs font-semibold"
-                  style={{ color: '#656263' }}
+              {currentLayer.filters.map((filterGroup, groupIndex) => (
+                <div
+                  key={filterGroup.id}
+                  className={groupIndex > 0 ? 'mt-3 pt-3 border-t' : ''}
+                  style={
+                    groupIndex > 0 ? { borderColor: '#e5e7eb' } : undefined
+                  }
                 >
-                  Filtrer på prøvetype
-                </span>
-                {hasActiveFilters && (
-                  <button
-                    onClick={clearFilters}
-                    className="text-xs hover:underline"
-                    style={{ color: '#4782cb' }}
-                  >
-                    Nullstill
-                  </button>
-                )}
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={filters.vannprøve}
-                    onChange={() => toggleFilter('vannprøve')}
-                    className="w-3.5 h-3.5 rounded"
-                    style={{ accentColor: '#4782cb' }}
-                  />
-                  <span
-                    className="text-xs"
-                    style={{ color: '#656263' }}
-                  >
-                    Vannprøve
-                  </span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={filters.sedimentprøve}
-                    onChange={() => toggleFilter('sedimentprøve')}
-                    className="w-3.5 h-3.5 rounded"
-                    style={{ accentColor: '#4782cb' }}
-                  />
-                  <span
-                    className="text-xs"
-                    style={{ color: '#656263' }}
-                  >
-                    Sedimentprøve
-                  </span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={filters.bløtbunnsfauna}
-                    onChange={() => toggleFilter('bløtbunnsfauna')}
-                    className="w-3.5 h-3.5 rounded"
-                    style={{ accentColor: '#4782cb' }}
-                  />
-                  <span
-                    className="text-xs"
-                    style={{ color: '#656263' }}
-                  >
-                    Bløtbunnsfauna
-                  </span>
-                </label>
-              </div>
-
-              {/* Owner filters */}
-              <div
-                className="mt-3 pt-3 border-t"
-                style={{ borderColor: '#e5e7eb' }}
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <span
-                    className="text-xs font-semibold"
-                    style={{ color: '#656263' }}
-                  >
-                    Filtrer på eier
-                  </span>
+                  <div className="flex items-center justify-between mb-2">
+                    <span
+                      className="text-xs font-semibold"
+                      style={{ color: '#656263' }}
+                    >
+                      {getFilterHeading(filterGroup)}
+                    </span>
+                    {groupIndex === 0 && hasActiveFilters && (
+                      <button
+                        onClick={clearFilters}
+                        className="text-xs hover:underline"
+                        style={{ color: '#4782cb' }}
+                      >
+                        Nullstill
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    {filterGroup.options.map((option) => (
+                      <label
+                        key={option.id}
+                        className="flex items-center gap-2 cursor-pointer"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={Boolean(filters[option.id])}
+                          onChange={() => toggleFilter(option.id)}
+                          className="w-3.5 h-3.5 rounded"
+                          style={{
+                            accentColor: option.color || '#4782cb',
+                          }}
+                        />
+                        <span
+                          className="text-xs"
+                          style={{ color: '#656263' }}
+                        >
+                          {option.label}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
                 </div>
-                <div className="flex flex-col gap-1.5">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={filters.ownerFK}
-                      onChange={() => toggleFilter('ownerFK')}
-                      className="w-3.5 h-3.5 rounded"
-                      style={{ accentColor: '#c026d3' }}
-                    />
-                    <span
-                      className="text-xs"
-                      style={{ color: '#656263' }}
-                    >
-                      Færder kommune
-                    </span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={filters.ownerTK}
-                      onChange={() => toggleFilter('ownerTK')}
-                      className="w-3.5 h-3.5 rounded"
-                      style={{ accentColor: '#22c55e' }}
-                    />
-                    <span
-                      className="text-xs"
-                      style={{ color: '#656263' }}
-                    >
-                      Tønsberg kommune
-                    </span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={filters.ownerTR}
-                      onChange={() => toggleFilter('ownerTR')}
-                      className="w-3.5 h-3.5 rounded"
-                      style={{ accentColor: '#ff4500' }}
-                    />
-                    <span
-                      className="text-xs"
-                      style={{ color: '#656263' }}
-                    >
-                      Tønsberg renseanlegg
-                    </span>
-                  </label>
-                </div>
-              </div>
+              ))}
             </div>
           )}
         </div>
