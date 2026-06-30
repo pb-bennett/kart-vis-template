@@ -17,10 +17,29 @@ import {
 } from 'react-leaflet';
 import L from 'leaflet';
 import configuredBasemaps, { defaultBasemapId } from '../config/basemaps';
+import configuredLayers from '../config/layers';
 
 const basemapsById = Object.fromEntries(
   configuredBasemaps.map((basemap) => [basemap.id, basemap])
 );
+
+const layersById = Object.fromEntries(
+  configuredLayers.map((layer) => [layer.id, layer])
+);
+
+function isLayerVisibleAtZoom(layerId, zoom) {
+  const minZoom = layersById[layerId]?.minZoom;
+  return minZoom === null || minZoom === undefined || zoom >= minZoom;
+}
+
+function isLayerLabelVisibleAtZoom(layerId, zoom) {
+  const labelMinZoom = layersById[layerId]?.labelMinZoom;
+  return (
+    labelMinZoom !== null &&
+    labelMinZoom !== undefined &&
+    zoom >= labelMinZoom
+  );
+}
 
 // Copy button component for coordinates
 function CopyButton({ text, label }) {
@@ -641,25 +660,17 @@ export default function Map({
     }
   };
 
-  // Combine all layers for rendering on the map, adding layer source to each feature
-  // Order matters: lines first, then ult_punkt, then prv_punkt (so prv_punkt is on top)
-  const allFeatures = [
-    ...(allLayers.utl_ledning || []).map((f, idx) => ({
-      ...f,
-      _layer: 'utl_ledning',
-      _index: idx,
-    })),
-    ...(allLayers.ult_punkt || []).map((f, idx) => ({
-      ...f,
-      _layer: 'ult_punkt',
-      _index: idx,
-    })),
-    ...(allLayers.prv_punkt || []).map((f, idx) => ({
-      ...f,
-      _layer: 'prv_punkt',
-      _index: idx,
-    })),
-  ];
+  // Combine all layers for rendering on the map, adding layer source to each feature.
+  const allFeatures = configuredLayers
+    .slice()
+    .sort((a, b) => a.renderOrder - b.renderOrder)
+    .flatMap((layer) =>
+      (allLayers[layer.id] || []).map((f, idx) => ({
+        ...f,
+        _layer: layer.id,
+        _index: idx,
+      }))
+    );
 
   // Compute initial center and zoom to fit bounds
   const pointFeatures = allFeatures.filter(
@@ -945,13 +956,13 @@ export default function Map({
           maxNativeZoom={selectedBasemap.maxNativeZoom}
         />
 
-        {/* Render lines (not clustered) - hide at zoom 12 or further out */}
-        {currentZoom >= 13 &&
-          allFeatures
+        {/* Render lines (not clustered) - hide at configured min zoom */}
+        {allFeatures
             .filter(
               (f) =>
-                f.geometry.type === 'LineString' ||
-                f.geometry.type === 'MultiLineString'
+                (f.geometry.type === 'LineString' ||
+                  f.geometry.type === 'MultiLineString') &&
+                isLayerVisibleAtZoom(f._layer, currentZoom)
             )
             .map((f) => {
               const isSelected =
@@ -1107,7 +1118,7 @@ export default function Map({
             const visiblePoints = allFeatures
               .filter((f) => f.geometry.type === 'Point')
               .filter(
-                (f) => f._layer === 'prv_punkt' || currentZoom >= 13
+                (f) => isLayerVisibleAtZoom(f._layer, currentZoom)
               );
 
             return visiblePoints.map((f, visibleIndex) => {
@@ -1168,7 +1179,9 @@ export default function Map({
 
                 // Label text - use REF only
                 const labelText = f.properties.REF || '';
-                const showLabel = currentZoom >= 14 && labelText;
+                const showLabel =
+                  isLayerLabelVisibleAtZoom(f._layer, currentZoom) &&
+                  labelText;
 
                 // Get label offset based on nearby points - position away from clusters
                 const labelOffset = getBestLabelOffset(
@@ -1345,7 +1358,9 @@ export default function Map({
               // For sampling points, use circle markers
               // Label text for prøvetakingspunkt - use navn
               const prvLabelText = f.properties.navn || '';
-              const showPrvLabel = currentZoom >= 14 && prvLabelText;
+              const showPrvLabel =
+                isLayerLabelVisibleAtZoom(f._layer, currentZoom) &&
+                prvLabelText;
 
               // Get label offset based on nearby points - position away from clusters
               const prvLabelOffset = getBestLabelOffset(
